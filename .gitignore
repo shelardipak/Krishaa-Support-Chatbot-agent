@@ -1,0 +1,14 @@
+/.bashrc
+venv/
+.local/
+.npm
+.ssh
+.voc
+.cache/*
+__pycache__/
+KRISHAA-SUPPORT-CHATBOT/.env
+.env
+.venv/
+.pytest_cache/
+.DS_Store
+feedback.jsonl
