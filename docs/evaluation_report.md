@@ -23,3 +23,19 @@ The default strategy is grounded_rag because it balances helpfulness, safety, an
 - Retrieval may be too generic if the Qdrant collection is weak or low-quality.
 - The fallback adapter is deterministic and should be replaced with native Qdrant integration for real deployments.
 - Image URLs must be treated as optional context and only included when relevant to the answer.
+
+## Debugged failure case: test environment dependency failure
+- Failure observed: `pytest -q` failed during collection of `tests/test_agent.py` with a runtime import error.
+- Error message:
+  - `ModuleNotFoundError: No module named 'pyaudioop'`
+  - Triggered by `app/ui/gradio_app.py` importing `gradio`, which imports `pydub`.
+- Root cause:
+  - `gradio` depends on `pydub` for audio handling.
+  - On the current macOS Python environment, the native `audioop` module was unavailable, and the fallback package `pyaudioop` was not installed.
+  - As a result, the test suite could not even collect Gradio-related tests, blocking validation of chatbot behavior.
+- Fix:
+  - Install the missing runtime dependency (`pyaudioop`) or ensure the environment satisfies `gradio`/`pydub` audio dependencies.
+  - This is an environment dependency issue rather than an application logic bug, but it must be captured in evaluation and deployment readiness documentation.
+- Before/after proof:
+  - Before: `pytest -q` raised the import error at `app/ui/gradio_app.py:6` during module import.
+  - After fix: the Gradio import issue is resolved and test collection can proceed past `tests/test_agent.py`.
