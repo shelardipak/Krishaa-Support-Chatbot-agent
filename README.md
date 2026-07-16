@@ -1,86 +1,92 @@
-# Engineering Products RAG Chatbot
+# Krishaa Engineers Support Chatbot
 
-A lightweight, production-oriented RAG chatbot for public support questions about engineering products from Raychem, CharCoat, and Mennekes. The app uses LangChain-style orchestration, a Qdrant-backed retrieval layer, Gradio for the user experience, and optional LangSmith tracing for observability.
+A lightweight Gradio-based assistant for product support questions about Raychem, CharCoat, and Mennekes. The chatbot is built around Qdrant retrieval, OpenAI chat models, and safe escalation logic. It also includes a contact-capture flow for protected document and pricing requests.
 
-## Features
-- Product support Q&A grounded in retrieved Qdrant context
-- Vendor filter: All, Raychem, CharCoat, Mennekes
-- Image display when a retrieved image URL is relevant
-- Anonymous in-session memory only
-- Safety checks and escalation for unsupported or sensitive requests
-- Feedback collection via thumbs up/down without storing personal data
-- Contact capture before releasing drawings, data sheets, installation manuals, detailed test reports, or pricing
-- Configurable SMTP notification for qualified technical-support requests
+## What this app does
+- Answers engineering product support questions using retrieved documentation context
+- Filters requests to supported vendors: Raychem, CharCoat, Mennekes
+- Escalates unsupported or unsafe requests to human support
+- Captures contact details before submitting protected document or pricing requests
+- Stores feedback in `feedback.jsonl`
+- Optionally resolves source links via Supabase-hosted document URLs
 
-## Local setup
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Frontend UI | Gradio |
+| Chat / Prompt Engine | LangChain (`ChatOpenAI`, `ChatPromptTemplate`) |
+| LLM Provider | OpenAI |
+| Retrieval | Qdrant (remote) with deterministic fallback |
+| Embeddings | OpenAI `text-embedding-3-small` |
+| Storage | SQLite + `feedback.jsonl` |
+| Config | `python-dotenv` |
+| Email Notification | SMTP via `app.notifications.email` |
+| Local Workflow | Python 3.10+ |
+
+## Execution Flow
+
+1. User enters a question in the Gradio UI.
+2. The app receives the query in `app/ui/gradio_app.py` and forwards it to `app.agent.graph.RAGAgent.chat()`.
+3. The agent performs safety checks in `app.agent.safety.safety_check()`.
+   - If the query is off-topic, the assistant returns a product-relevance redirect.
+   - If the query matches protected request patterns, the app starts the contact capture flow.
+4. If the request passes safety, the agent queries Qdrant via `app.retrieval.qdrant_client.QdrantClientAdapter.search()`.
+5. The agent decides whether to answer from retrieval or escalate using `app.agent.tools.route_tool()`.
+6. `app.agent.response_builder.build_response()` generates the final answer:
+   - If retrieval context exists, the answer is grounded in documentation.
+   - If no relevant context is available, the app returns a safe fallback or escalation message.
+7. The response is sent back to the UI with optional source references and image URLs.
+8. User feedback is stored in `app/feedback/feedback_store.py`.
+
+## Run locally
+
 1. Create and activate a Python environment.
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. Copy the example environment file and fill in secrets:
-   ```bash
-   cp .env.example .env
-   ```
-4. Run the app:
+3. Create a `.env` file with required secrets.
+4. Start the app:
    ```bash
    python app.py
    ```
 
-## Hugging Face Spaces deployment
-Add the following secrets in Hugging Face Spaces:
-- OPENAI_API_KEY
-- OPENAI_MODEL
-- OPENAI_EMBEDDING_MODEL
-- OPENAI_EMBEDDING_DIMENSIONS (only for collections created with a custom dimension)
-- QDRANT_URL
-- QDRANT_API_KEY
-- QDRANT_COLLECTION
-- QDRANT_VECTOR_NAME (only for named-vector collections)
-- QDRANT_SCORE_THRESHOLD (optional minimum similarity score)
-- QDRANT_ALLOW_FALLBACK (keep false outside tests/demos)
-- LANGSMITH_TRACING
-- LANGSMITH_API_KEY
-- LANGSMITH_PROJECT
-- SUPABASE_URL
-- SUPABASE_STORAGE_BUCKET
-- SUPABASE_DOCUMENT_BUCKET (public bucket containing the source PDFs)
-- LEAD_NOTIFICATION_EMAIL (defaults to `shelar.dipak@gmail.com`)
-- SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_APP_PASSWORD, SMTP_FROM_EMAIL
-- SMTP_USE_TLS and SMTP_USE_SSL
+## Phase documentation
+- [Phase 1: Problem framing](./docs/phase1_problem_framing_document.md)
+- [Phase 2: Baseline agent](./docs/phase2_baseline_agent.md)
+- [Phase 3: Smart agent improvements](./docs/phase3_smart_agent.md)
+- [Phase 4: Retrieval-augmented generation](./docs/phase4_smart_agent_with_rag.md)
+- [Phase 5: Tool usage](./docs/phase5_smart_agent_with_rag_tools.md)
+- [Phase 6: Planning, memory & context](./docs/phase6_planning_memory_context.md)
+- [Phase 7: Adaptive behaviour](./docs/phase7_adaptive_behaviour.md)
+- [Phase 8: Deployment readiness](./docs/phase8_deployment_readiness.md)
+- [Phase 9: Evaluation & engineering review](./docs/phase9_evaluation_engineering_review.md)
 
-For a real deployment, ensure your Qdrant collection already contains payload fields such as vendor, product_name, source_file, source_path, page_number, chunk_type, text, and image_url. The app will use those values automatically when present. Upload source PDFs to `SUPABASE_DOCUMENT_BUCKET` while preserving their Qdrant `source_path`; grounded chatbot answers will then end with deduplicated clickable document references.
+## Key configuration
+The app uses these environment variables:
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_EMBEDDING_MODEL`
+- `QDRANT_URL`
+- `QDRANT_API_KEY`
+- `QDRANT_COLLECTION`
+- `QDRANT_VECTOR_NAME`
+- `QDRANT_SCORE_THRESHOLD`
+- `QDRANT_ALLOW_FALLBACK`
+- `SUPABASE_URL`
+- `SUPABASE_STORAGE_BUCKET`
+- `SUPABASE_DOCUMENT_BUCKET`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_APP_PASSWORD`
+- `SMTP_FROM_EMAIL`
+- `LEAD_NOTIFICATION_EMAIL`
+- `LANGSMITH_TRACING`
+- `LANGSMITH_API_KEY`
 
-Protected document and pricing requests start a four-step contact flow. The app sends the completed request through SMTP before confirming follow-up. For Gmail SMTP, use `smtp.gmail.com`, port `587`, TLS enabled, your full Gmail address as `SMTP_USERNAME`, and the generated 16-character Google App Password as `SMTP_APP_PASSWORD`. Never enter the regular Google account password.
-
-The repository includes Hugging Face-compatible metadata at the top of this README.
-
----
-title: Engineering Products RAG Chatbot
-sdk: gradio
-app_file: app.py
----
-
-## Testing
-Run the test suite with:
-```bash
-pytest -q
-```
-
-## Website widget demo
-With the chatbot running on port 7860, start the sample website in another terminal:
-```bash
-python -m http.server 8080 --directory demo
-```
-Then open `http://localhost:8080/chat-widget.html` and click the floating chat button.
-
-For a deployed chatbot, replace the iframe's `data-chatbot-url` in `demo/chat-widget.html`
-or preview a URL without editing the file:
-```text
-http://localhost:8080/chat-widget.html?chatbot=https://your-space.hf.space
-```
-
-## Notes and limitations
-- The repository intentionally avoids a heavy local model and uses a lightweight retrieval-backed agent.
-- The current implementation uses a deterministic fallback retrieval adapter so the repository remains runnable even when Qdrant credentials are unavailable.
-- For production, swap the adapter to a native Qdrant client integration and wire in a real LangChain chat model.
+## Notes
+- The app is optimized for lightweight deployment and simple product-support workflows.
+- When Qdrant is unavailable, deterministic fallback data preserves chatbot flow for demos.
+- Feedback is stored locally in `feedback.jsonl` and does not directly feed back into the current prompt chain.
